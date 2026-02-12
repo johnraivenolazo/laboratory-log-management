@@ -12,7 +12,8 @@ import {
   Clock,
   ArrowRight,
   History,
-  Loader2
+  Loader2,
+  QrCode
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -194,6 +195,13 @@ function AdminContent() {
                   <Link href="/admin/logs">
                     <History className="h-5 w-5 text-zinc-400" />
                     Export Usage Reports
+                    <ArrowRight className="ml-auto h-4 w-4 opacity-30" />
+                  </Link>
+                </Button>
+                <Button variant="outline" className="justify-start gap-3 h-14 bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-200" asChild>
+                  <Link href="/admin/qr">
+                    <QrCode className="h-5 w-5 text-zinc-400" />
+                    Download QR Codes
                     <ArrowRight className="ml-auto h-4 w-4 opacity-30" />
                   </Link>
                 </Button>
