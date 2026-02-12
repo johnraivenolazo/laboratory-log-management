@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * NEU Laboratory Usage Log - Security Rules Analysis
+     * 
+     * Core Philosophy:
+     * This ruleset implements a Hybrid Role-Based and Ownership-Based Access Control model. 
+     * Security is anchored by the Firebase Auth UID. Administrative privileges are determined 
+     * by the existence of a document in the '/roles_admin' collection.
+     * 
+     * Data Structure:
+     * - /professors/{professorId}: Profiles of academic staff.
+     * - /admins/{adminId}: Profiles of administrative staff.
+     * - /roles_admin/{adminId}: A protected collection where the presence of a UID grants global admin rights.
+     * - /lab_rooms/{roomId}: Information about physical laboratory spaces.
+     * - /usage_logs/{usageLogId}: Log entries documenting room usage, containing denormalized professor IDs.
+     * 
+     * Key Security Decisions:
+     * 1. Denormalization: The 'professorId' is stored directly in 'UsageLog' documents. This allows 
+     *    the system to verify ownership/access without performing additional 'get()' calls, 
+     *    reducing latency and cost.
+     * 2. Admin Authority: Admins have broad read/write access across all collections to support 
+     *    dashboards, search, and the ability to block professors.
+     * 3. Professor Restrictions: Professors are restricted to managing their own profiles and 
+     *    viewing/creating their own usage logs.
+     * 4. Structural Segregation: Role identifiers are kept in a separate 'roles_admin' collection 
+     *    to prevent users from elevating their own permissions through profile updates.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    /** @description Checks if the user is authenticated with Firebase Auth. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Checks if the authenticated user's UID matches the provided ID. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Checks if the user exists and owns the document (for updates/deletes). */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    /** @description Checks if the authenticated user has the Admin role via DB lookup. */
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for Professor Profiles. Allows users to manage their own profile and admins to manage all.
+     * @path /professors/{professorId}
+     * @allow (get) If user is the professor or is an admin.
+     * @deny (update) If a non-admin tries to update another professor's profile.
+     * @principle Ownership-based access for users; Role-based override for admins.
+     */
+    match /professors/{professorId} {
+      allow get: if isOwner(professorId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(professorId) && request.resource.data.id == professorId;
+      allow update: if isExistingOwner(professorId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Stores Lab Room information. Generally public for viewing but admin-only for edits.
+     * @path /lab_rooms/{roomId}
+     * @allow (get) Any signed-in user can view room details.
+     * @deny (create) Any user who is not an admin.
+     * @principle Public Read with Admin-Only Writes.
+     */
+    match /lab_rooms/{roomId} {
+      allow get, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    /**
+     * @description Usage logs for rooms. Professors create their own; Admins view all.
+     * @path /usage_logs/{usageLogId}
+     * @allow (create) If professorId matches current user's UID.
+     * @deny (update) If user is not the professor who created the log or an admin.
+     * @principle Relational integrity enforced by matching professorId to auth UID.
+     */
+    match /usage_logs/{usageLogId} {
+      allow get: if isAdmin() || (isSignedIn() && resource.data.professorId == request.auth.uid);
+      allow list: if isAdmin(); // Note: List restricted to Admin. Owners use specific queries or subcollections in production.
+      allow create: if isSignedIn() && request.resource.data.professorId == request.auth.uid;
+      allow update: if isAdmin() || (resource != null && resource.data.professorId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Admin profile data. Accessible by the owner or other admins.
+     * @path /admins/{adminId}
+     * @allow (get) If adminId is the user's UID or user is an admin.
+     * @deny (create) If not an admin or not setting up own profile.
+     * @principle Restricts admin profile access to authenticated administrative personnel.
+     */
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(adminId) || isAdmin();
+      allow update: if isExistingOwner(adminId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    /**
+     * @description Administrative Role markers. The most sensitive collection in the system.
+     * @path /roles_admin/{adminId}
+     * @allow (get) Any signed-in user can check for role existence.
+     * @deny (write) Any non-admin user attempting to grant permissions.
+     * @principle Strict role-based write access.
+     */
+    match /roles_admin/{adminId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
