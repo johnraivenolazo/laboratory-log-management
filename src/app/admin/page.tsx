@@ -7,9 +7,10 @@ import {
   getAllStudents,
   updateStudentStatus,
   searchDocuments,
-  uploadDocument,
+  saveDocumentMetadata,
   getDownloadStats
 } from '@/lib/firestore-service';
+import { upload } from '@vercel/blob/client';
 import { CICSDocument, UserProfile, DownloadLog } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
 export default function AdminDashboard() {
-  const { user, firestore, storage } = useFirebase(); // Need storage!
+  const { user, firestore } = useFirebase(); // Firebase Storage no longer needed here
   const [stats, setStats] = useState({ users: 0, downloads: 0 });
 
   // State for Tabs
@@ -77,14 +78,24 @@ export default function AdminDashboard() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !newDoc.title || !newDoc.category || !firestore || !storage || !user) return;
+    if (!file || !newDoc.title || !newDoc.category || !firestore || !user) return;
 
     setUploading(true);
     try {
-      await uploadDocument(firestore, storage, file, {
+      // 1. Upload to Vercel Blob
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload',
+      });
+
+      // 2. Save metadata to Firestore
+      await saveDocumentMetadata(firestore, {
         ...newDoc,
+        fileUrl: blob.url,
+        fileType: file.type,
         uploadedBy: user.uid
       });
+
       toast({ title: 'Document Uploaded' });
       setUploadOpen(false);
       setNewDoc({ title: '', description: '', category: '' });

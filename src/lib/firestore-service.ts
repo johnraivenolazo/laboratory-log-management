@@ -16,12 +16,6 @@ import {
     limit
 } from 'firebase/firestore';
 import {
-    FirebaseStorage,
-    ref,
-    uploadBytes,
-    getDownloadURL
-} from 'firebase/storage';
-import {
     CICSDocument,
     UserProfile,
     UserStatus,
@@ -96,32 +90,31 @@ export async function getAllStudents(firestore: Firestore): Promise<UserProfile[
 
 // --- Document Management ---
 
-export async function uploadDocument(
+export async function saveDocumentMetadata(
     firestore: Firestore,
-    storage: FirebaseStorage,
-    file: File,
-    meta: { title: string, description: string, category: string, uploadedBy: string }
+    data: {
+        title: string,
+        description: string,
+        category: string,
+        fileUrl: string,
+        fileType: string,
+        uploadedBy: string
+    }
 ): Promise<void> {
-    // 1. Upload file to Storage
-    const storageRef = ref(storage, `documents/${Date.now()}_${file.name}`);
-    const uploadResult = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(uploadResult.ref);
-
-    // 2. Create Document record in Firestore
     const docData: Omit<CICSDocument, 'id'> = {
-        title: meta.title,
-        description: meta.description,
-        category: meta.category,
-        fileUrl: downloadURL, // Store URL
-        fileType: file.type,
-        uploadedBy: meta.uploadedBy,
-        createdAt: new Date(), // Client date usage, serverTimestamp better but types conflict
+        title: data.title,
+        description: data.description,
+        category: data.category,
+        fileUrl: data.fileUrl,
+        fileType: data.fileType,
+        uploadedBy: data.uploadedBy,
+        createdAt: new Date(),
         downloadCount: 0
     };
 
     await addDoc(collection(firestore, 'documents'), {
         ...docData,
-        createdAt: serverTimestamp() // Override with server time
+        createdAt: serverTimestamp()
     });
 }
 

@@ -42,14 +42,13 @@ export function initializeFirebase() {
   return getSdks(getApp());
 }
 
-import { getStorage } from 'firebase/storage';
+// import { getStorage } from 'firebase/storage';
 
 export function getSdks(firebaseApp: FirebaseApp) {
   return {
     firebaseApp,
     auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp),
-    storage: getStorage(firebaseApp)
+    firestore: getFirestore(firebaseApp)
   };
 }
 
