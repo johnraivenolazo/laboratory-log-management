@@ -1,56 +1,95 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ShieldCheck, Mail, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useFirebase } from '@/firebase/provider';
+import { signInWithGoogle } from '@/lib/auth-service';
+import { checkIsAdmin, createOrUpdateProfessorProfile } from '@/lib/firestore-service';
+import type { User } from 'firebase/auth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const { auth, firestore, user, isUserLoading } = useFirebase();
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (!email.endsWith('@neu.edu.ph')) {
-      toast({
-        variant: "destructive",
-        title: "Access Denied",
-        description: "Only institutional emails (@neu.edu.ph) are allowed.",
-      });
-      setLoading(false);
-      return;
+  // Auto-redirect if already signed in
+  useEffect(() => {
+    if (!isUserLoading && user && firestore) {
+      routeAfterLogin(user);
     }
+  }, [user, isUserLoading]);
 
-    setTimeout(() => {
-      if (email.startsWith('admin')) {
+  const routeAfterLogin = async (fbUser: User) => {
+    try {
+      const admin = await checkIsAdmin(firestore!, fbUser.uid);
+      if (admin) {
         router.push('/admin');
       } else {
+        await createOrUpdateProfessorProfile(firestore!, fbUser.uid, {
+          email: fbUser.email!,
+          displayName: fbUser.displayName || fbUser.email!,
+          photoURL: fbUser.photoURL || undefined,
+        });
         router.push('/professor');
       }
-    }, 1000);
+    } catch (err) {
+      console.error('Post-login routing error:', err);
+    }
   };
 
-  const loginWithGoogle = () => {
+  const handleGoogleLogin = async (hint?: string) => {
     setLoading(true);
-    setTimeout(() => router.push('/professor'), 1500);
+    try {
+      const fbUser = await signInWithGoogle(auth!, hint);
+      await routeAfterLogin(fbUser);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Access Denied',
+        description: err.message || 'Authentication failed. Please use your @neu.edu.ph account.',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.endsWith('@neu.edu.ph')) {
+      toast({
+        variant: 'destructive',
+        title: 'Access Denied',
+        description: 'Only institutional emails (@neu.edu.ph) are allowed.',
+      });
+      return;
+    }
+    handleGoogleLogin(email);
+  };
+
+  // Show loading while checking existing session
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-black">
       <div className="hidden lg:flex flex-col justify-center p-16 bg-zinc-950 text-white relative overflow-hidden border-r border-zinc-900">
         <div className="absolute top-0 right-0 w-96 h-96 bg-zinc-100/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-[120px]" />
-        
+
         <div className="relative z-10 space-y-12">
           <div className="space-y-4">
-            {/* Headers removed as requested */}
             <p className="text-xl text-zinc-400 max-w-sm leading-relaxed font-light">
               Secure authentication for institutional facility management.
             </p>
@@ -79,24 +118,25 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-zinc-400 text-xs font-bold uppercase tracking-widest ml-1">Email Address</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-600" />
-                  <Input 
-                    id="email" 
-                    placeholder="name@neu.edu.ph" 
-                    type="email" 
+                  <Input
+                    id="email"
+                    placeholder="name@neu.edu.ph"
+                    type="email"
                     className="pl-10 h-12 bg-zinc-900/50 border-zinc-800 text-zinc-100 placeholder:text-zinc-700 focus:ring-1 focus:ring-zinc-700 transition-all"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    required 
+                    required
                   />
                 </div>
               </div>
               <Button type="submit" className="w-full h-12 text-sm font-bold bg-zinc-100 text-black hover:bg-zinc-200 transition-all active:scale-[0.98]" disabled={loading}>
-                {loading ? "Authenticating..." : "Continue"}
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {loading ? 'Authenticating...' : 'Continue'}
                 {!loading && <ArrowRight className="ml-2 h-4 w-4" />}
               </Button>
             </form>
@@ -110,29 +150,17 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Button 
-              variant="outline" 
-              className="w-full h-12 font-bold border-zinc-800 bg-transparent text-zinc-300 hover:bg-zinc-900 hover:text-white transition-all active:scale-[0.98]" 
-              onClick={loginWithGoogle}
+            <Button
+              variant="outline"
+              className="w-full h-12 font-bold border-zinc-800 bg-transparent text-zinc-300 hover:bg-zinc-900 hover:text-white transition-all active:scale-[0.98]"
+              onClick={() => handleGoogleLogin()}
               disabled={loading}
             >
               <svg className="mr-3 h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  fill="#4285F4"
-                />
-                <path
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  fill="#34A853"
-                />
-                <path
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-                  fill="#FBBC05"
-                />
-                <path
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                  fill="#EA4335"
-                />
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
               Google Workspace
             </Button>

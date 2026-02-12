@@ -1,30 +1,64 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { History, Clock, MapPin, Calendar } from 'lucide-react';
-import { MOCK_LOGS } from '@/lib/mock-data';
+import { History, Clock, MapPin, Calendar, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import AuthGuard from '@/components/auth/AuthGuard';
+import { useFirebase } from '@/firebase/provider';
+import { getLogsByProfessor } from '@/lib/firestore-service';
+import type { LabLog } from '@/lib/types';
 
 export default function ProfessorHistoryPage() {
-  const [currentUser] = useState({
-    displayName: "Juan Dela Cruz",
-    email: "j.delacruz@neu.edu.ph",
-    role: "professor" as const,
-    photoURL: "https://picsum.photos/seed/1/100/100",
-    uid: "prof-1"
-  });
+  return (
+    <AuthGuard requiredRole="professor">
+      <HistoryContent />
+    </AuthGuard>
+  );
+}
 
-  // Filter logs for the current professor
-  const myLogs = MOCK_LOGS.filter(log => log.professorId === currentUser.uid);
+function HistoryContent() {
+  const { user, firestore } = useFirebase();
+  const [logs, setLogs] = useState<LabLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      if (!firestore || !user) return;
+      try {
+        const data = await getLogsByProfessor(firestore, user.uid);
+        setLogs(data);
+      } catch (err) {
+        console.error('Failed to load history:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [firestore, user]);
+
+  const currentUser = {
+    displayName: user?.displayName || 'Professor',
+    email: user?.email || '',
+    role: 'professor' as const,
+    photoURL: user?.photoURL || undefined,
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black">
       <Navbar user={currentUser} />
-      
+
       <main className="container mx-auto px-4 py-12 space-y-8 max-w-5xl">
         <header className="space-y-2">
           <div className="flex items-center gap-3 mb-2">
@@ -53,8 +87,8 @@ export default function ProfessorHistoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {myLogs.length > 0 ? (
-                  myLogs.map((log) => (
+                {logs.length > 0 ? (
+                  logs.map((log) => (
                     <TableRow key={log.id} className="border-zinc-900 hover:bg-zinc-900/40 transition-colors">
                       <TableCell className="text-zinc-300">
                         <div className="flex items-center gap-2">
@@ -109,14 +143,14 @@ export default function ProfessorHistoryPage() {
           <Card className="bg-zinc-950 border-zinc-800">
             <CardHeader className="pb-2">
               <CardDescription className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Total Sessions</CardDescription>
-              <CardTitle className="text-3xl text-white">{myLogs.length}</CardTitle>
+              <CardTitle className="text-3xl text-white">{logs.length}</CardTitle>
             </CardHeader>
           </Card>
           <Card className="bg-zinc-950 border-zinc-800">
             <CardHeader className="pb-2">
               <CardDescription className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Total Minutes</CardDescription>
               <CardTitle className="text-3xl text-white">
-                {myLogs.reduce((acc, log) => acc + (log.duration || 0), 0)}
+                {logs.reduce((acc, log) => acc + (log.duration || 0), 0)}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -124,7 +158,7 @@ export default function ProfessorHistoryPage() {
             <CardHeader className="pb-2">
               <CardDescription className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Fav Room</CardDescription>
               <CardTitle className="text-3xl text-white">
-                {myLogs.length > 0 ? `Room ${myLogs[0].roomNumber}` : 'N/A'}
+                {logs.length > 0 ? `Room ${logs[0].roomNumber}` : 'N/A'}
               </CardTitle>
             </CardHeader>
           </Card>

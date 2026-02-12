@@ -1,67 +1,163 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Navbar from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { QrCode, Mail, Loader2, CheckCircle2, MapPin, Clock } from 'lucide-react';
+import { QrCode, Mail, Loader2, CheckCircle2, MapPin, Clock, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import AuthGuard from '@/components/auth/AuthGuard';
+import { useFirebase } from '@/firebase/provider';
+import {
+  createUsageLog,
+  checkOutLog,
+  getActiveSession,
+  checkProfessorBlocked,
+} from '@/lib/firestore-service';
+import type { LabLog } from '@/lib/types';
+import dynamic from 'next/dynamic';
+
+const QRScanner = dynamic(() => import('@/components/professor/QRScanner'), { ssr: false });
 
 export default function ProfessorCheckIn() {
-  const [currentUser] = useState({
-    displayName: "Juan Dela Cruz",
-    email: "j.delacruz@neu.edu.ph",
-    role: "professor" as const,
-    photoURL: "https://picsum.photos/seed/1/100/100",
-    uid: "prof-1"
-  });
+  return (
+    <AuthGuard requiredRole="professor">
+      <ProfessorContent />
+    </AuthGuard>
+  );
+}
 
+function ProfessorContent() {
+  const { user, firestore } = useFirebase();
   const [loading, setLoading] = useState(false);
-  const [activeSession, setActiveSession] = useState<{ room: string; timeIn: Date } | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<LabLog | null>(null);
   const { toast } = useToast();
 
-  const simulateCheckIn = (room: string) => {
+  // Check for existing active session on mount
+  useEffect(() => {
+    async function load() {
+      if (!firestore || !user) return;
+      try {
+        const session = await getActiveSession(firestore, user.uid);
+        setActiveSession(session);
+      } catch (err) {
+        console.error('Failed to load active session:', err);
+      } finally {
+        setPageLoading(false);
+      }
+    }
+    load();
+  }, [firestore, user]);
+
+  const handleCheckIn = useCallback(async (room: string) => {
+    if (!firestore || !user) return;
     setLoading(true);
-    setTimeout(() => {
-      setActiveSession({ room, timeIn: new Date() });
-      setLoading(false);
+    try {
+      // Check if professor is blocked
+      const blocked = await checkProfessorBlocked(firestore, user.uid);
+      if (blocked) {
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'Your laboratory access has been revoked. Contact an administrator.',
+        });
+        return;
+      }
+
+      // Check for existing active session
+      const existing = await getActiveSession(firestore, user.uid);
+      if (existing) {
+        toast({
+          variant: 'destructive',
+          title: 'Active Session Exists',
+          description: `You already have an active session in Room ${existing.roomNumber}. Check out first.`,
+        });
+        setActiveSession(existing);
+        return;
+      }
+
+      const logId = await createUsageLog(firestore, {
+        professorId: user.uid,
+        professorName: user.displayName || user.email || 'Unknown',
+        roomNumber: room,
+      });
+
+      setActiveSession({
+        id: logId,
+        professorId: user.uid,
+        professorName: user.displayName || '',
+        roomNumber: room,
+        checkIn: new Date(),
+      });
+
       toast({
-        title: "Access Granted",
+        title: 'Access Granted',
         description: `Thank you for using Room ${room}. Session started at ${format(new Date(), 'hh:mm a')}.`,
       });
-    }, 2000);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message || 'Check-in failed.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [firestore, user, toast]);
+
+  const handleCheckOut = async () => {
+    if (!firestore || !activeSession) return;
+    setLoading(true);
+    try {
+      await checkOutLog(firestore, activeSession.id);
+      setActiveSession(null);
+      toast({
+        title: 'Session Ended',
+        description: 'You have successfully checked out. Have a productive day!',
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Error', description: err.message || 'Check-out failed.' });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleManualLogin = (e: React.FormEvent) => {
+  const handleQRScan = (decoded: string) => {
+    const room = decoded.trim();
+    if (room) handleCheckIn(room);
+  };
+
+  const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget as HTMLFormElement);
-    simulateCheckIn(formData.get('roomNumber') as string);
+    const room = (formData.get('roomNumber') as string)?.trim();
+    if (room) handleCheckIn(room);
   };
 
-  const handleCheckOut = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setActiveSession(null);
-      setLoading(false);
-      toast({
-        title: "Session Ended",
-        description: "You have successfully checked out. Have a productive day!",
-      });
-    }, 1500);
+  const currentUser = {
+    displayName: user?.displayName || 'Professor',
+    email: user?.email || '',
+    role: 'professor' as const,
+    photoURL: user?.photoURL || undefined,
   };
+
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black">
       <Navbar user={currentUser} />
-      
+
       <main className="container mx-auto px-4 py-12 max-w-2xl">
         <header className="mb-10 text-center sm:text-left">
           <h1 className="text-4xl font-bold tracking-tight text-white font-headline mb-2">Laboratory Entry</h1>
-          <p className="text-zinc-400 text-lg">Scan the lab's QR code or enter room details manually.</p>
+          <p className="text-zinc-400 text-lg">Scan the lab&apos;s QR code or enter room details manually.</p>
         </header>
 
         {activeSession ? (
@@ -79,12 +175,12 @@ export default function ProfessorCheckIn() {
                 <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 flex flex-col items-center gap-3">
                   <MapPin className="h-6 w-6 text-emerald-500" />
                   <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-[0.2em]">Room Number</span>
-                  <span className="text-2xl font-bold text-white">{activeSession.room}</span>
+                  <span className="text-2xl font-bold text-white">{activeSession.roomNumber}</span>
                 </div>
                 <div className="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 flex flex-col items-center gap-3">
                   <Clock className="h-6 w-6 text-emerald-500" />
                   <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-[0.2em]">Check-in Time</span>
-                  <span className="text-2xl font-bold text-white">{format(activeSession.timeIn, 'hh:mm a')}</span>
+                  <span className="text-2xl font-bold text-white">{format(activeSession.checkIn, 'hh:mm a')}</span>
                 </div>
               </div>
               <div className="text-center px-4">
@@ -92,13 +188,13 @@ export default function ProfessorCheckIn() {
               </div>
             </CardContent>
             <CardFooter className="pb-8">
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 className="w-full h-14 text-lg font-bold bg-rose-600 hover:bg-rose-700 transition-all shadow-lg shadow-rose-900/20"
                 onClick={handleCheckOut}
                 disabled={loading}
               >
-                {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "End Session & Check Out"}
+                {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'End Session & Check Out'}
               </Button>
             </CardFooter>
           </Card>
@@ -114,7 +210,7 @@ export default function ProfessorCheckIn() {
                 Manual Entry
               </TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="qr" className="mt-8">
               <Card className="border border-zinc-800 bg-zinc-950 shadow-2xl">
                 <CardHeader>
@@ -123,27 +219,15 @@ export default function ProfessorCheckIn() {
                     Point your camera at the QR code displayed near the lab entrance.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-col items-center justify-center space-y-8 py-12">
-                  <div className="relative w-72 h-72 bg-zinc-900 rounded-[2.5rem] overflow-hidden shadow-inner border border-zinc-800 group">
-                    <div className="absolute inset-0 border-2 border-white/5 rounded-[2.5rem] m-6 group-hover:scale-105 transition-transform duration-500" />
-                    <div className="absolute top-0 left-0 w-full h-1 bg-white/20 shadow-[0_0_20px_rgba(255,255,255,0.3)] animate-pulse" />
-                    <div className="flex items-center justify-center h-full opacity-40">
-                       <QrCode className="h-32 w-32 text-white" />
-                    </div>
-                    {loading && (
-                      <div className="absolute inset-0 bg-black/80 flex items-center justify-center backdrop-blur-sm">
-                        <Loader2 className="h-12 w-12 text-white animate-spin" />
-                      </div>
-                    )}
-                  </div>
-                  <Button 
-                    size="lg" 
-                    className="gap-2 px-10 h-14 text-lg font-bold bg-white text-black hover:bg-zinc-200" 
-                    onClick={() => simulateCheckIn('304 (Simulated Scan)')}
+                <CardContent className="flex flex-col items-center justify-center space-y-4 py-8">
+                  <QRScanner
+                    onScan={handleQRScan}
+                    onError={(msg) => toast({ variant: 'destructive', title: 'Camera Error', description: msg })}
                     disabled={loading}
-                  >
-                    Simulate Camera Scan
-                  </Button>
+                  />
+                  <p className="text-xs text-zinc-600 text-center max-w-xs">
+                    The QR code contains the room number. Grant camera permission when prompted.
+                  </p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -157,19 +241,19 @@ export default function ProfessorCheckIn() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleManualLogin} className="space-y-6">
+                  <form onSubmit={handleManualSubmit} className="space-y-6">
                     <div className="space-y-3">
                       <Label htmlFor="roomNumber" className="text-zinc-300 ml-1">Laboratory Room Number</Label>
-                      <Input 
-                        id="roomNumber" 
+                      <Input
+                        id="roomNumber"
                         name="roomNumber"
-                        placeholder="e.g. 101, 204, or BIO-1" 
-                        required 
+                        placeholder="e.g. 101, 204, or BIO-1"
+                        required
                         className="h-14 text-lg font-medium bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-600 focus:ring-white/20"
                       />
                     </div>
                     <Button type="submit" className="w-full h-14 text-lg font-bold bg-white text-black hover:bg-zinc-200" disabled={loading}>
-                      {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Verify Access"}
+                      {loading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Verify Access'}
                     </Button>
                   </form>
                 </CardContent>

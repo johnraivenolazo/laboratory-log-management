@@ -3,16 +3,18 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { LogOut, LayoutDashboard, History, UserCheck } from 'lucide-react';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { usePathname, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useFirebase } from '@/firebase/provider';
+import { signOutUser } from '@/lib/auth-service';
 
 interface NavbarProps {
   user: {
@@ -26,16 +28,22 @@ interface NavbarProps {
 export default function Navbar({ user }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const { auth } = useFirebase();
 
-  const handleLogout = () => {
-    router.push('/');
+  const handleLogout = async () => {
+    try {
+      await signOutUser(auth);
+      router.push('/');
+    } catch (err) {
+      console.error('Logout failed:', err);
+      router.push('/');
+    }
   };
 
   return (
     <nav className="border-b border-zinc-900 bg-black/80 backdrop-blur-md sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          {/* Logo/Brand removed as requested */}
           <div className="hidden md:flex items-center gap-2">
             {user.role === 'admin' ? (
               <>
@@ -89,13 +97,12 @@ export default function Navbar({ user }: NavbarProps) {
 
 function NavLink({ href, active, children, icon }: { href: string; active: boolean; children: React.ReactNode; icon: React.ReactNode }) {
   return (
-    <Link 
-      href={href} 
-      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-        active 
-          ? 'bg-zinc-100 text-black' 
+    <Link
+      href={href}
+      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${active
+          ? 'bg-zinc-100 text-black'
           : 'text-zinc-500 hover:text-zinc-100'
-      }`}
+        }`}
     >
       {icon}
       {children}

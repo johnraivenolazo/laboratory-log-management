@@ -89,7 +89,7 @@ service cloud.firestore {
      */
     match /usage_logs/{usageLogId} {
       allow get: if isAdmin() || (isSignedIn() && resource.data.professorId == request.auth.uid);
-      allow list: if isAdmin(); // Note: List restricted to Admin. Owners use specific queries or subcollections in production.
+      allow list: if isAdmin() || (isSignedIn() && resource.data.professorId == request.auth.uid);
       allow create: if isSignedIn() && request.resource.data.professorId == request.auth.uid;
       allow update: if isAdmin() || (resource != null && resource.data.professorId == request.auth.uid);
       allow delete: if isAdmin();

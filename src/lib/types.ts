@@ -24,5 +24,5 @@ export interface Room {
   id: string;
   name: string;
   building: string;
-  activeSessions: number;
+  qrCode?: string;
 }
