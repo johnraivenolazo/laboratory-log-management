@@ -89,10 +89,13 @@ export default function AdminDashboard() {
       });
 
       // 2. Save metadata to Firestore
+      const extension = file.name.split('.').pop() || 'pdf';
       await saveDocumentMetadata(firestore, {
         ...newDoc,
         fileUrl: blob.url,
+        downloadUrl: blob.downloadUrl,
         fileType: file.type,
+        extension: extension,
         uploadedBy: user.uid
       });
 

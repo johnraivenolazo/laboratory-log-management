@@ -21,7 +21,9 @@ export interface CICSDocument {
   description: string;
   category: string; // e.g., 'Memo', 'Curriculum', 'Form'
   fileUrl: string;
-  fileType: string; // 'pdf', etc.
+  downloadUrl: string;
+  fileType: string; // mime type
+  extension: string; // e.g., 'pdf'
   uploadedBy: string; // admin uid
   createdAt: Date;
   downloadCount: number;

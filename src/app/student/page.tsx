@@ -48,16 +48,21 @@ export default function StudentDashboard() {
 
             // Trigger browser download
             const link = document.createElement('a');
-            link.href = doc.fileUrl;
+            link.href = doc.downloadUrl || doc.fileUrl;
             link.target = '_blank';
-            link.download = doc.title;
+
+            // Ensure the download filename has the correct extension
+            const safeTitle = doc.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const extension = doc.extension || doc.fileUrl.split('.').pop()?.split('?')[0] || 'pdf';
+            link.download = `${safeTitle}.${extension}`;
+
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
 
             toast({
                 title: 'Download Started',
-                description: `Downloading ${doc.title}...`,
+                description: `Downloading ${doc.title}.${extension}...`,
             });
         } catch (err) {
             console.error('Download error:', err);

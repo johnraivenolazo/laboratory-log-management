@@ -97,7 +97,9 @@ export async function saveDocumentMetadata(
         description: string,
         category: string,
         fileUrl: string,
+        downloadUrl: string,
         fileType: string,
+        extension: string,
         uploadedBy: string
     }
 ): Promise<void> {
@@ -106,7 +108,9 @@ export async function saveDocumentMetadata(
         description: data.description,
         category: data.category,
         fileUrl: data.fileUrl,
+        downloadUrl: data.downloadUrl,
         fileType: data.fileType,
+        extension: data.extension,
         uploadedBy: data.uploadedBy,
         createdAt: new Date(),
         downloadCount: 0
