@@ -19,6 +19,7 @@ import {
 import AuthGuard from '@/components/auth/AuthGuard';
 import { useFirebase } from '@/firebase/provider';
 import { getAllLogs } from '@/lib/firestore-service';
+import { mockLogs } from '@/lib/mock-data';
 import type { LabLog } from '@/lib/types';
 
 export default function UsageLogsPage() {
@@ -41,12 +42,17 @@ function LogsContent() {
 
   useEffect(() => {
     async function load() {
-      if (!firestore) return;
+      if (!firestore) {
+        setLogs(mockLogs);
+        setLoading(false);
+        return;
+      }
       try {
         const data = await getAllLogs(firestore);
-        setLogs(data);
+        setLogs(data.length > 0 ? data : mockLogs);
       } catch (err) {
-        console.error('Failed to load logs:', err);
+        console.error('Failed to load logs, falling back to mock:', err);
+        setLogs(mockLogs);
       } finally {
         setLoading(false);
       }
