@@ -1,59 +1,66 @@
 # CICS Document Portal
 
-An official document repository for **College of Information and Computing Sciences (CICS)** students and faculty at New Era University. This portal allows students to securely access and download college documents, memos, and forms.
+A central repository for CICS students and faculty to manage, share, and download official college documents.
 
-## 🚀 Key Features
+![Student Dashboard](public/student_dashboard.png)
+
+## Overview
+
+This portal serves as a digital distribution channel for college forms, memos, and curriculum guides. It ensures that students have access to the correct, up-to-date files without needing to visit the office physically.
+
+## Features
 
 ### For Students
-*   **Secure Access**: Single Sign-On (SSO) with official `@neu.edu.ph` email.
-*   **Onboarding**: One-time setup to select your undergraduate program (BSCS, BSIT, etc.).
-*   **Document Search**: Quickly find memos, forms, and curriculum guides.
-*   **Downloads**: Securely download PDF documents.
+*   **Single Sign-On (SSO)**: Login using official `@neu.edu.ph` email.
+*   **Document Search**: Filter and find documents by category (Memo, Form, Curriculum).
+*   **Profile Setup**: Set program (BSCS, BSIT) on first login to see relevant content.
 
-### For Administrators
-*   **Document Management**: Upload, categorize, and manage files.
-*   **User Management**: Monitor student roster and block/unblock accounts.
-*   **Analytics**: Track daily login stats and document download activity.
-*   **Audit Logs**: Detailed history of who downloaded what and when.
+### For Admins
+*   **File Management**: Upload PDF documents and assign categories.
+*   **Download Tracking**: View stats on which documents are downloaded most.
+*   **Audit Logs**: Track who accessed which document and when.
 
-## 🛠 Tech Stack
+## Screenshots
 
-*   **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
-*   **Language**: TypeScript
-*   **Database**: Firebase Firestore
-*   **Storage**: Firebase Storage
-*   **Auth**: Firebase Authentication (Google Workspace)
-*   **Styling**: Tailwind CSS + [shadcn/ui](https://ui.shadcn.com/)
+| Login Page | Student Dashboard |
+|:---:|:---:|
+| ![Login](public/login_page.png) | ![Dashboard](public/student_dashboard.png) |
 
-## ⚙️ Setup & Installation
+| Document Search | Admin Panel |
+|:---:|:---:|
+| ![Search](public/document_search.png) | ![Admin](public/admin_panel.png) |
 
-### 1. Clone the Repository
-```bash
-git clone https://github.com/johnraivenolazo/laboratory-log-management.git
-cd laboratory-log-management
-```
+## Tech Stack
 
-### 2. Install Dependencies
-```bash
-pnpm install
-```
+*   **Frontend**: Next.js 14, TypeScript, Tailwind CSS
+*   **Backend**: Firebase (Firestore, Storage, Auth)
+*   **Styling**: shadcn/ui components
 
-### 3. Firebase Configuration
-1.  Create a Firebase Project.
-2.  Enable **Authentication** (Google Sign-In).
-3.  Enable **Firestore Database**.
-4.  Enable **Storage**.
-5.  Copy `firestore.rules` content to Firebase Console > Firestore > Rules.
-6.  Set up your `.env.local` or update `src/firebase/config.ts`.
+## Setup & Installation
 
-### 4. Run Locally
-```bash
-pnpm dev
-# Open http://localhost:3000
-```
+1.  **Clone the repo**
+    ```bash
+    git clone https://github.com/johnraivenolazo/neu-document-portal.git
+    cd neu-document-portal
+    ```
 
-## 🔐 Admin Access
-To promote a user to **Admin**, create a document in the `roles_admin` collection in Firestore with the user's UID and field `active: true`.
+2.  **Install dependencies**
+    ```bash
+    pnpm install
+    ```
 
----
-**Developed for New Era University - CICS**
+3.  **Configure Environment**
+    Set up your `.env.local` with Firebase credentials (API Key, Project ID, etc.).
+
+4.  **Run locally**
+    ```bash
+    pnpm dev
+    ```
+
+## Admin Access
+
+To promote a user to **Admin**:
+1.  Go to your Firestore database.
+2.  Find or create the `roles_admin` collection.
+3.  Add a document with the user's **UID**.
+4.  Set the field `active` to `true`.
